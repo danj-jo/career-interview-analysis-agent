@@ -6,11 +6,15 @@ Returns a predefined response. Replace logic and configuration as needed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict
-
+from typing import Any, Dict, Annotated
+from langgraph.graph import START, END
 from langgraph.graph import StateGraph
 from langgraph.runtime import Runtime
 from typing_extensions import TypedDict
+from langchain_ollama import ChatOllama
+from langgraph.graph.message import add_messages
+
+model = ChatOllama(model="qwen3:8b", temperature=0)
 
 
 class Context(TypedDict):
@@ -31,7 +35,7 @@ class State:
     See: https://langchain-ai.github.io/langgraph/concepts/low_level/#state
     """
 
-    changeme: str = "example"
+    messages: Annotated[list, add_messages]
 
 
 async def call_model(state: State, runtime: Runtime[Context]) -> Dict[str, Any]:
@@ -39,16 +43,15 @@ async def call_model(state: State, runtime: Runtime[Context]) -> Dict[str, Any]:
 
     Can use runtime context to alter behavior.
     """
-    return {
-        "changeme": "output from call_model. "
-        f"Configured with {(runtime.context or {}).get('my_configurable_param')}"
-    }
+    response = await model.ainvoke(state.messages)
+    return {"messages": [response]}
 
 
 # Define the graph
 graph = (
     StateGraph(State, context_schema=Context)
     .add_node(call_model)
-    .add_edge("__start__", "call_model")
+    .add_edge(START, "call_model")
+    .add_edge("call_model", END)
     .compile(name="New Graph")
 )
